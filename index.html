@@ -4,6 +4,10 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>TinySeva — Doorstep Government Services</title>
+<!-- Firebase SDK -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
 :root {
@@ -288,7 +292,7 @@ body:not(.gated) .sidebar, body:not(.gated) .main-area { visibility:visible; }
 .contact-toggle-btn { flex:1; text-align:center; padding:8px; border-radius:8px; font-size:12px; font-weight:700; cursor:pointer; border:1.5px solid var(--grey-100); color: var(--grey-600); }
 .contact-toggle-btn.active { border-color: var(--brand); color: var(--brand); background: var(--brand-pale); }
 .otp-boxes { display:flex; gap:8px; justify-content:center; margin: 6px 0 16px; }
-.otp-box { width:44px; height:52px; text-align:center; font-size:20px; font-weight:800; border:1.5px solid var(--grey-100); border-radius:10px; font-family: var(--font-mono); }
+.otp-box { width:40px; height:50px; text-align:center; font-size:18px; font-weight:800; border:1.5px solid var(--grey-100); border-radius:10px; font-family: var(--font-mono); }
 .otp-box:focus { border-color: var(--brand); outline:none; }
 .otp-demo-banner { background: var(--yellow-pale); border:1px solid var(--yellow); color: var(--yellow-dark); font-size:12px; font-weight:700; padding:10px 12px; border-radius:8px; margin-bottom:14px; text-align:center; }
 .resend-link { text-align:center; font-size:12px; color: var(--grey-600); margin-top:12px; }
@@ -432,15 +436,16 @@ body:not(.gated) .sidebar, body:not(.gated) .main-area { visibility:visible; }
     <!-- STEP 2: OTP verification -->
     <div class="auth-step" id="authStep2">
       <div class="auth-back" onclick="goToStep(1)">← Back</div>
-      <div class="otp-demo-banner" id="otpDemoBanner">Demo OTP sent: <span id="otpDemoValue">0000</span></div>
-      <div class="card-subtitle text-center" id="otpSentTo" style="margin-bottom:4px">Enter the 4-digit code we sent</div>
+      <div class="card-subtitle text-center" id="otpSentTo" style="margin-bottom:16px;font-size:14px;color:var(--grey-600)">Enter the 6-digit code we sent</div>
       <div class="otp-boxes">
-        <input type="text" maxlength="1" class="otp-box" id="otp0" oninput="otpMove(0)">
-        <input type="text" maxlength="1" class="otp-box" id="otp1" oninput="otpMove(1)">
-        <input type="text" maxlength="1" class="otp-box" id="otp2" oninput="otpMove(2)">
-        <input type="text" maxlength="1" class="otp-box" id="otp3" oninput="otpMove(3)">
+        <input type="number" maxlength="1" class="otp-box" id="otp0" oninput="otpMove(0)">
+        <input type="number" maxlength="1" class="otp-box" id="otp1" oninput="otpMove(1)">
+        <input type="number" maxlength="1" class="otp-box" id="otp2" oninput="otpMove(2)">
+        <input type="number" maxlength="1" class="otp-box" id="otp3" oninput="otpMove(3)">
+        <input type="number" maxlength="1" class="otp-box" id="otp4" oninput="otpMove(4)">
+        <input type="number" maxlength="1" class="otp-box" id="otp5" oninput="otpMove(5)">
       </div>
-      <button class="btn btn-primary btn-lg" onclick="verifyOtp()">Verify &amp; Continue</button>
+      <button class="btn btn-primary btn-lg" onclick="verifyOtp()">Verify &amp; Sign In</button>
       <div class="resend-link">Didn't get it? <span onclick="sendOtp(true)">Resend OTP</span></div>
     </div>
 
@@ -1003,76 +1008,118 @@ body:not(.gated) .sidebar, body:not(.gated) .main-area { visibility:visible; }
 </div>
 
 <div id="toast" style="position:fixed; bottom:24px; right:24px; background:var(--blue-deep); color:white; padding:12px 20px; border-radius:var(--radius); font-size:13px; font-weight:600; transform:translateY(100px); transition:transform 0.3s; z-index:999; max-width:280px; box-shadow:var(--shadow-md); display:flex; align-items:center; gap:8px;"></div>
+<div id="recaptcha-container"></div>
 
 <script>
+// ---- FIREBASE INIT ----
+const firebaseConfig = {
+  apiKey: "AIzaSyAyAr9-ihwiSBkn63s1x7HaYqcGu62w77Q",
+  authDomain: "helpdesk-e0cc3.firebaseapp.com",
+  projectId: "helpdesk-e0cc3",
+  storageBucket: "helpdesk-e0cc3.firebasestorage.app",
+  messagingSenderId: "106060058062",
+  appId: "1:106060058062:web:7434d05ef508a6bc522f9f"
+};
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.firestore();
+
+// ---- SERVICES CATALOG (real data — these are the actual services TinySeva offers) ----
 const SERVICES = [
-  { id: 1, name: 'Aadhaar Update', icon: '🪪', price: 50, doorstep: 80, time: 30, cat: 'identity' },
-  { id: 2, name: 'PAN Card', icon: '💳', price: 100, doorstep: 130, time: 45, cat: 'identity' },
-  { id: 3, name: 'Income Certificate', icon: '📄', price: 80, doorstep: 110, time: 60, cat: 'certificate' },
-  { id: 4, name: 'PM Kisan Application', icon: '🌾', price: 60, doorstep: 90, time: 45, cat: 'scheme' },
-  { id: 5, name: 'Ayushman Bharat', icon: '🏥', price: 75, doorstep: 105, time: 60, cat: 'scheme' },
-  { id: 6, name: 'Passport Assistance', icon: '📘', price: 200, doorstep: 230, time: 90, cat: 'identity' },
-  { id: 7, name: 'Bill Payment', icon: '⚡', price: 20, doorstep: 50, time: 10, cat: 'payment' },
-  { id: 8, name: 'Scholarship Application', icon: '🎓', price: 90, doorstep: 120, time: 60, cat: 'scheme' },
+  { id: 1, name: 'Aadhaar Update', price: 50, doorstep: 80, time: 30, cat: 'identity' },
+  { id: 2, name: 'PAN Card', price: 100, doorstep: 130, time: 45, cat: 'identity' },
+  { id: 3, name: 'Income Certificate', price: 80, doorstep: 110, time: 60, cat: 'certificate' },
+  { id: 4, name: 'PM Kisan Application', price: 60, doorstep: 90, time: 45, cat: 'scheme' },
+  { id: 5, name: 'Ayushman Bharat', price: 75, doorstep: 105, time: 60, cat: 'scheme' },
+  { id: 6, name: 'Passport Assistance', price: 200, doorstep: 230, time: 90, cat: 'identity' },
+  { id: 7, name: 'Bill Payment', price: 20, doorstep: 50, time: 10, cat: 'payment' },
+  { id: 8, name: 'Scholarship Application', price: 90, doorstep: 120, time: 60, cat: 'scheme' },
 ];
 
-const PROVIDERS = [
-  { id: 1, name: 'Dinesh Grahak Kendra', area: 'Dharavi, Mumbai', distance: '1.2 km', initial: 'D', services: [1,2,3,7], rating: 4.8, reviews: 142, verified: true, cscId: 'MH-CSC-01123' },
-  { id: 2, name: 'Priti Subh Chintak Center', area: 'Govandi, Mumbai', distance: '2.4 km', initial: 'P', services: [2,1,4,5,8], rating: 4.9, reviews: 98, verified: true, cscId: 'MH-CSC-02287' },
-  { id: 3, name: 'Shweta Dwar Madat Center', area: 'Kalwa, Thane', distance: '3.1 km', initial: 'S', services: [2,1,3,6,7], rating: 4.7, reviews: 67, verified: true, cscId: 'MH-CSC-03654' },
-];
+// ---- STATE ----
+let state = {
+  user: null, role: 'citizen', contactMode: 'phone',
+  confirmationResult: null, pendingName: '', pendingPhone: '', pendingRole: 'citizen', pendingPassword: '',
+  selectedService: null, selectedMode: 'walkin',
+  isOnline: false, countdownTimer: null,
+  providerDoc: null, pendingRequest: null, activeOrderId: null,
+  ordersUnsubscribe: null,
+};
+let recaptchaVerifier = null;
 
-const CITIZENS = ['Rishi Sayyed', 'Anu Pardeshi', 'Meghna Subramanyam', 'Sarfaraz Jaiswar', 'Sid Kale', 'Rakesh Pawar'];
-
-const DOCS = [
-  { name: 'Aadhaar Card', icon: '🪪', status: 'uploaded' },
-  { name: 'Ration Card', icon: '📋', status: 'uploaded' },
-  { name: 'Income Cert.', icon: '📄', status: 'pending' },
-  { name: 'PAN Card', icon: '💳', status: 'pending' },
-  { name: 'Birth Certificate', icon: '📝', status: '' },
-  { name: 'Caste Certificate', icon: '🔖', status: '' },
+// ---- ORDER STEPS ----
+const ORDER_STEPS = [
+  { title: 'Request confirmed', desc: 'Provider matched and notified' },
+  { title: 'Provider en route', desc: 'Your service is being processed' },
+  { title: 'In progress', desc: 'Government formality being completed' },
+  { title: 'Completed', desc: 'Service delivered' },
 ];
 
 let state = { selectedService: null, selectedMode: 'walkin', currentProvider: PROVIDERS[0], isOnline: false, countdownTimer: null, orderStep: 0, authRole: 'citizen', contactMode: 'phone', pendingOtp: null, newProviderProfile: null };
 
-// ---------- URL routing (auth is always the first page) ----------
+// ---- FIREBASE AUTH STATE ----
+auth.onAuthStateChanged(async (user) => {
+  if (!user) return; // stay on auth screen
+  try {
+    const snap = await db.collection('users').doc(user.uid).get();
+    if (snap.exists) {
+      completeLogin(user, snap.data());
+    } else {
+      await auth.signOut(); // orphaned auth record
+    }
+  } catch(e) { console.error('Auth state error:', e); }
+});
+
+// ---- URL ROUTING ----
 (function() {
   const urlRole = new URLSearchParams(window.location.search).get('role');
   if (urlRole && ['citizen', 'provider', 'admin'].includes(urlRole)) {
-    // Role pre-selected via URL → lock the role tabs and show an indicator
-    state.authRole = urlRole;
+    state.role = urlRole; state.pendingRole = urlRole;
     document.querySelectorAll('#roleTabs .role-tab').forEach(t => t.classList.toggle('active', t.dataset.role === urlRole));
     document.getElementById('roleTabs').style.display = 'none';
     const roleNames = { citizen: 'Citizen', provider: 'Provider (CSC)', admin: 'Admin' };
     const ind = document.createElement('div');
     ind.className = 'role-indicator';
     ind.innerHTML = `<span class="role-indicator-name">${roleNames[urlRole]}</span><span class="role-indicator-change" onclick="window.location.href=window.location.pathname">Change role</span>`;
-    const step1 = document.getElementById('authStep1');
-    step1.insertBefore(ind, step1.firstChild);
+    document.getElementById('authStep1').insertBefore(ind, document.getElementById('authStep1').firstChild);
+    updateAuthForm(urlRole);
   }
 })();
 
-// ---------- STEP 1: role + contact mode toggles ----------
-function updatePasswordVisibility(role) {
+// ---- AUTH FORM SETUP ----
+function updateAuthForm(role) {
   const ps = document.getElementById('passwordSection');
   const hint = document.getElementById('authHint');
+  const toggle = document.getElementById('contactToggle');
+  const btn = document.querySelector('#authStep1 .btn-primary');
   if (role === 'citizen') {
-    ps.style.display = 'none';
-    hint.textContent = 'A one-time password will be sent to verify your identity.';
-  } else {
-    ps.style.display = 'block';
-    hint.textContent = 'Set a password for your ' + (role === 'admin' ? 'admin' : 'provider') + ' account. OTP verification is also required.';
+    ps.style.display = 'none'; toggle.style.display = 'flex';
+    document.getElementById('contactPhoneGroup').style.display = 'block';
+    document.getElementById('contactEmailGroup').style.display = 'none';
+    hint.textContent = 'A one-time code will be sent to your mobile to verify your identity.';
+    if (btn) btn.textContent = 'Continue';
+  } else if (role === 'provider') {
+    ps.style.display = 'block'; toggle.style.display = 'flex';
+    document.getElementById('contactPhoneGroup').style.display = 'block';
+    document.getElementById('contactEmailGroup').style.display = 'none';
+    hint.textContent = 'Set a password for your provider account. OTP verification is also required.';
+    if (btn) btn.textContent = 'Continue';
+  } else if (role === 'admin') {
+    ps.style.display = 'block'; toggle.style.display = 'none';
+    document.getElementById('contactPhoneGroup').style.display = 'none';
+    document.getElementById('contactEmailGroup').style.display = 'block';
+    hint.textContent = 'Sign in with your admin email and password.';
+    if (btn) btn.textContent = 'Sign In';
   }
 }
-// Apply to initial state (citizen default, or URL-specified role)
-updatePasswordVisibility(state.authRole);
+updateAuthForm('citizen');
 
 document.querySelectorAll('#roleTabs .role-tab').forEach(tab => {
   tab.addEventListener('click', () => {
     document.querySelectorAll('#roleTabs .role-tab').forEach(t => t.classList.remove('active'));
     tab.classList.add('active');
-    state.authRole = tab.dataset.role;
-    updatePasswordVisibility(state.authRole);
+    state.role = tab.dataset.role; state.pendingRole = tab.dataset.role;
+    updateAuthForm(tab.dataset.role);
   });
 });
 document.querySelectorAll('#contactToggle .contact-toggle-btn').forEach(btn => {
@@ -1092,138 +1139,177 @@ function goToStep(n) {
   document.querySelectorAll('#authProgress .dot').forEach(d => d.classList.toggle('done', Number(d.dataset.step) <= n));
 }
 
-// ---------- STEP 2: OTP send + verify (simulated — no real SMS/email gateway in this demo) ----------
-function sendOtp(isResend) {
+// ---- SEND OTP / SIGN IN ----
+async function sendOtp(isResend) {
+  const role = state.pendingRole;
   const name = document.getElementById('loginName').value.trim();
-  const contactVal = state.contactMode === 'phone' ? document.getElementById('loginPhone').value.trim() : document.getElementById('loginEmail').value.trim();
+
+  // Admin: email + password (no OTP)
+  if (role === 'admin') {
+    const email = document.getElementById('loginEmail').value.trim();
+    const pass = document.getElementById('loginPassword').value;
+    const passConfirm = document.getElementById('loginPasswordConfirm').value;
+    if (!name) { showToast('Enter your full name.'); return; }
+    if (!email) { showToast('Enter your admin email address.'); return; }
+    if (!pass || pass.length < 6) { showToast('Password must be at least 6 characters.'); return; }
+    const btn = document.querySelector('#authStep1 .btn-primary');
+    btn.disabled = true; btn.textContent = 'Signing in...';
+    try {
+      let cred;
+      try { cred = await auth.signInWithEmailAndPassword(email, pass); }
+      catch(e) {
+        if (e.code === 'auth/user-not-found' || e.code === 'auth/invalid-credential' || e.code === 'auth/invalid-email') {
+          if (pass !== passConfirm) { showToast('Passwords do not match.'); btn.disabled = false; btn.textContent = 'Sign In'; return; }
+          cred = await auth.createUserWithEmailAndPassword(email, pass);
+        } else throw e;
+      }
+      await db.collection('users').doc(cred.user.uid).set(
+        { name, email, role: 'admin', updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true }
+      );
+      completeLogin(cred.user, { name, email, role: 'admin' });
+    } catch(e) {
+      showToast(e.message.replace('Firebase: Error (auth/', '').replace(').', '').replace(/-/g,' '));
+      btn.disabled = false; btn.textContent = 'Sign In';
+    }
+    return;
+  }
+
+  // Citizen / Provider: Phone OTP
+  const phone = document.getElementById('loginPhone').value.trim();
   if (!isResend) {
-    if (!name) { showToast('⚠️ Please enter your full name.'); return; }
-    if (!contactVal) { showToast(`⚠️ Please enter your ${state.contactMode === 'phone' ? 'phone number' : 'email ID'}.`); return; }
-    if (state.authRole !== 'citizen') {
-      const password = document.getElementById('loginPassword').value;
-      const passwordConfirm = document.getElementById('loginPasswordConfirm').value;
-      if (!password || password.length < 6) { showToast('⚠️ Password must be at least 6 characters.'); return; }
-      if (password !== passwordConfirm) { showToast('⚠️ Passwords do not match.'); return; }
-      state.accountPassword = password;
+    if (!name) { showToast('Enter your full name.'); return; }
+    if (!phone || phone.length !== 10) { showToast('Enter a valid 10-digit mobile number.'); return; }
+    if (role === 'provider') {
+      const pass = document.getElementById('loginPassword').value;
+      const passConfirm = document.getElementById('loginPasswordConfirm').value;
+      if (!pass || pass.length < 6) { showToast('Password must be at least 6 characters.'); return; }
+      if (pass !== passConfirm) { showToast('Passwords do not match.'); return; }
+      state.pendingPassword = pass;
     }
   }
-  state.pendingOtp = String(Math.floor(1000 + Math.random() * 9000));
-  document.getElementById('otpDemoValue').textContent = state.pendingOtp;
-  document.getElementById('otpSentTo').textContent = `Enter the 4-digit code sent to ${contactVal}`;
-  document.querySelectorAll('.otp-box').forEach(b => b.value = '');
-  document.getElementById('otp0').focus();
-  goToStep(2);
-  showToast(isResend ? '📨 New OTP sent' : '📨 OTP sent');
+  state.pendingName = name;
+  state.pendingPhone = '+91' + phone;
+
+  const btn = document.querySelector('#authStep1 .btn-primary');
+  btn.disabled = true; btn.textContent = 'Sending OTP...';
+  try {
+    if (!recaptchaVerifier) {
+      recaptchaVerifier = new firebase.auth.RecaptchaVerifier('recaptcha-container', { size: 'invisible' });
+    }
+    state.confirmationResult = await auth.signInWithPhoneNumber(state.pendingPhone, recaptchaVerifier);
+    document.getElementById('otpSentTo').textContent = 'Code sent to +91 ' + phone + '. Check your SMS.';
+    document.querySelectorAll('.otp-box').forEach(b => b.value = '');
+    document.getElementById('otp0').focus();
+    goToStep(2);
+    showToast('OTP sent to +91 ' + phone);
+  } catch(e) {
+    console.error(e);
+    showToast('Could not send OTP: ' + (e.message || 'Please try again.'));
+    try { recaptchaVerifier.clear(); } catch(_) {}
+    recaptchaVerifier = null;
+  } finally {
+    btn.disabled = false; btn.textContent = 'Continue';
+  }
 }
+
 function otpMove(i) {
   const box = document.getElementById('otp' + i);
-  if (box.value && i < 3) document.getElementById('otp' + (i + 1)).focus();
+  if (box.value && i < 5) document.getElementById('otp' + (i + 1)).focus();
 }
-function verifyOtp() {
-  const entered = [0,1,2,3].map(i => document.getElementById('otp' + i).value).join('');
-  if (entered.length < 4) { showToast('⚠️ Enter all 4 digits.'); return; }
-  if (entered !== state.pendingOtp) { showToast('❌ Incorrect OTP — check the demo code shown above.'); return; }
-  showToast('✅ Verified!');
-  if (state.authRole === 'provider') {
-    document.getElementById('profServicesGrid').innerHTML = SERVICES.map(s => `
-      <label class="service-check" id="pcheck-${s.id}">
-        <input type="checkbox" value="${s.id}" onchange="toggleServiceCheck(${s.id})"> ${s.icon} ${s.name}
-      </label>`).join('');
-    goToStep(3);
-  } else {
-    completeLogin();
+
+async function verifyOtp() {
+  const code = [0,1,2,3,4,5].map(i => (document.getElementById('otp'+i)?.value||'')).join('');
+  if (code.length < 6) { showToast('Enter all 6 digits.'); return; }
+  const btn = document.querySelector('#authStep2 .btn-primary');
+  btn.disabled = true; btn.textContent = 'Verifying...';
+  try {
+    const cred = await state.confirmationResult.confirm(code);
+    const uid = cred.user.uid;
+    const role = state.pendingRole;
+    const userData = { name: state.pendingName, phone: state.pendingPhone, role, updatedAt: firebase.firestore.FieldValue.serverTimestamp() };
+    await db.collection('users').doc(uid).set(userData, { merge: true });
+    if (role === 'provider') {
+      const provSnap = await db.collection('providers').doc(uid).get();
+      if (!provSnap.exists) {
+        document.getElementById('profServicesGrid').innerHTML = SERVICES.map(s =>
+          `<label class="service-check" id="pcheck-${s.id}"><input type="checkbox" value="${s.id}" onchange="toggleServiceCheck(${s.id})"> ${s.name}</label>`
+        ).join('');
+        goToStep(3); return;
+      }
+    }
+    completeLogin(cred.user, { name: state.pendingName, phone: state.pendingPhone, role });
+  } catch(e) {
+    showToast('Incorrect code. Please try again.');
+  } finally {
+    btn.disabled = false; btn.textContent = 'Verify & Sign In';
   }
 }
 
-// ---------- STEP 3: CSC / Provider profile creation ----------
-function toggleServiceCheck(id) {
-  document.getElementById('pcheck-' + id).classList.toggle('checked');
-}
-function submitProviderProfile() {
+// ---- STEP 3: PROVIDER PROFILE ----
+function toggleServiceCheck(id) { document.getElementById('pcheck-' + id).classList.toggle('checked'); }
+
+async function submitProviderProfile() {
   const business = document.getElementById('profBusiness').value.trim();
   const area = document.getElementById('profArea').value.trim();
+  const cscId = document.getElementById('profCscId').value.trim();
   const checked = Array.from(document.querySelectorAll('#profServicesGrid input:checked')).map(c => Number(c.value));
-  if (!business) { showToast('⚠️ Please enter your business / CSC center name.'); return; }
-  if (!area) { showToast('⚠️ Please enter your area / locality.'); return; }
-  if (!checked.length) { showToast('⚠️ Select at least one service you can offer.'); return; }
-
-  const newId = Math.max(...PROVIDERS.map(p => p.id)) + 1;
-  const newProvider = {
-    id: newId,
-    name: business,
-    area: area,
-    distance: '0.0 km',
-    initial: business.trim()[0].toUpperCase(),
-    services: checked,
-    rating: 0,
-    reviews: 0,
-    verified: false,
-    cscId: document.getElementById('profCscId').value.trim() || '—',
-  };
-  PROVIDERS.push(newProvider);
-  state.newProviderProfile = newProvider;
-  state.currentProvider = newProvider;
-  showToast('🎉 Profile created — pending admin verification');
-  completeLogin();
+  if (!business) { showToast('Enter your business / CSC center name.'); return; }
+  if (!area) { showToast('Enter your area / locality.'); return; }
+  if (!checked.length) { showToast('Select at least one service.'); return; }
+  const btn = document.querySelector('#authStep3Provider .btn-primary');
+  btn.disabled = true; btn.textContent = 'Saving...';
+  try {
+    const user = auth.currentUser;
+    await db.collection('providers').doc(user.uid).set({
+      uid: user.uid, name: state.pendingName, businessName: business,
+      cscId: cscId || '', area, services: checked,
+      verified: false, isOnline: false, rating: 0,
+      totalOrders: 0, todayOrders: 0, todayEarnings: 0,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    showToast('Profile created — pending admin verification.');
+    completeLogin(user, { name: state.pendingName, phone: state.pendingPhone, role: 'provider' });
+  } catch(e) { showToast('Error saving profile. Please try again.'); }
+  finally { btn.disabled = false; btn.textContent = 'Create Profile & Continue'; }
 }
 
-// ---------- Finish login, enter the app ----------
-function completeLogin() {
-  const name = document.getElementById('loginName').value.trim() || 'Guest User';
+// ---- COMPLETE LOGIN ----
+async function completeLogin(user, userData) {
   document.getElementById('authWrap').classList.add('hidden');
   document.body.classList.remove('gated');
-
-  document.getElementById('sideAvatar').textContent = name.split(' ').map(w => w[0]).join('').slice(0,2).toUpperCase();
+  state.user = user; state.role = userData.role;
+  const name = userData.name || 'User';
+  const role = userData.role;
+  document.getElementById('sideAvatar').textContent = name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
   document.getElementById('sideName').textContent = name;
-  const roleLabels = { citizen: 'Citizen', provider: 'Provider Partner', admin: 'Program Lead' };
-  document.getElementById('sideRole').textContent = roleLabels[state.authRole];
-
-  // Real production apps show only ONE role's screen per login (see nav filtering below) —
-  // this demo lets you switch roles by logging out, so you can explore all three.
-  document.querySelectorAll('.nav-item').forEach(item => {
-    item.style.display = item.dataset.view === state.authRole ? 'flex' : 'none';
-  });
-  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-  document.querySelector(`.nav-item[data-view="${state.authRole}"]`).classList.add('active');
+  document.getElementById('sideRole').textContent = { citizen:'Citizen', provider:'Provider Partner', admin:'Program Lead' }[role] || role;
+  document.querySelectorAll('.nav-item').forEach(item => { item.style.display = item.dataset.view === role ? 'flex' : 'none'; });
+  document.querySelector(`.nav-item[data-view="${role}"]`)?.classList.add('active');
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
-  document.getElementById('view-' + state.authRole).classList.add('active');
-
-  if (state.authRole === 'provider') {
-    renderProviderSelector();
-    updateProviderView();
-  }
-  if (state.authRole === 'admin') {
-    renderAllProviders();
-    renderServiceBreakdown();
-    renderAllOrders();
-    renderAdminPricing();
+  document.getElementById('view-' + role)?.classList.add('active');
+  showToast('Welcome, ' + name + '!');
+  if (role === 'citizen') { renderServices(); }
+  else if (role === 'provider') { loadProviderData(user.uid); }
+  else if (role === 'admin') {
     document.getElementById('adminSubtitle').textContent = `Welcome, ${name} · Platform oversight`;
+    loadAdminData();
   }
-
-  showToast(`👋 Welcome, ${name}!`);
 }
 
 function doLogout() {
-  document.body.classList.add('gated');
-  document.getElementById('authWrap').classList.remove('hidden');
-  document.getElementById('loginName').value = '';
-  document.getElementById('loginPhone').value = '';
-  document.getElementById('loginEmail').value = '';
-  document.getElementById('loginPassword').value = '';
-  document.getElementById('loginPasswordConfirm').value = '';
-  goToStep(1);
+  if (state.ordersUnsubscribe) { state.ordersUnsubscribe(); state.ordersUnsubscribe = null; }
+  auth.signOut().then(() => {
+    state.user = null; state.role = 'citizen'; state.providerDoc = null;
+    document.body.classList.add('gated');
+    document.getElementById('authWrap').classList.remove('hidden');
+    ['loginName','loginPhone','loginEmail','loginPassword','loginPasswordConfirm'].forEach(id => { const el = document.getElementById(id); if(el) el.value = ''; });
+    goToStep(1); updateAuthForm('citizen');
+    document.querySelectorAll('#roleTabs .role-tab').forEach(t => t.classList.toggle('active', t.dataset.role==='citizen'));
+    document.getElementById('roleTabs').style.display = '';
+  });
 }
 
-document.addEventListener('DOMContentLoaded', () => {
-  renderServices();
-  renderProviderSelector();
-  renderVault();
-  renderAllProviders();
-  renderServiceBreakdown();
-  renderAllOrders();
-  renderAdminPricing();
-  updateProviderView();
-});
+document.addEventListener('DOMContentLoaded', () => { renderVault(); renderAdminPricing(); });
 
 document.querySelectorAll('.nav-item').forEach(item => {
   item.addEventListener('click', () => {
@@ -1238,10 +1324,9 @@ document.querySelectorAll('.nav-item').forEach(item => {
 function renderServices() {
   document.getElementById('servicesGrid').innerHTML = SERVICES.map(s => `
     <div class="service-card" id="sc-${s.id}" onclick="selectService(${s.id})">
-      <div class="service-icon">${s.icon}</div>
       <div class="service-name">${s.name}</div>
       <div class="service-price">₹${s.price}</div>
-      <div class="service-meta">⏱ ${s.time} min · ${s.cat}</div>
+      <div class="service-meta">${s.time} min · ${s.cat}</div>
     </div>`).join('');
 }
 
@@ -1250,7 +1335,7 @@ function selectService(id) {
   document.querySelectorAll('.service-card').forEach(c => c.classList.remove('selected'));
   document.getElementById('sc-' + id).classList.add('selected');
   document.getElementById('bookingOptions').style.display = 'block';
-  document.getElementById('selectedServiceInfo').textContent = `${state.selectedService.icon} ${state.selectedService.name} — choose your preferred mode`;
+  document.getElementById('selectedServiceInfo').textContent = `${state.selectedService.name} — choose your preferred mode`;
   document.getElementById('walkinPrice').textContent = '₹' + state.selectedService.price;
   document.getElementById('doorstepPrice').textContent = '₹' + state.selectedService.doorstep;
   selectMode('walkin');
@@ -1263,69 +1348,76 @@ function selectMode(mode) {
   document.getElementById('optDoorstep').classList.toggle('selected', mode === 'doorstep');
 }
 
-function startBooking() {
-  document.getElementById('searchService').textContent = state.selectedService.name;
+async function startBooking() {
+  if (!state.selectedService) { showToast('Select a service first.'); return; }
+  const user = auth.currentUser;
+  if (!user) { showToast('Please sign in first.'); return; }
+  const price = state.selectedMode === 'walkin' ? state.selectedService.price : state.selectedService.doorstep;
   showOverlay('searchingOverlay');
-  setTimeout(() => {
-    hideOverlay('searchingOverlay');
-    const p = PROVIDERS[Math.floor(Math.random() * PROVIDERS.length)];
-    state.currentOrderProvider = p;
-    document.getElementById('foundProviderName').textContent = p.name;
-    document.getElementById('foundProviderArea').textContent = `${p.area} · ${p.distance} away`;
-    showOverlay('foundOverlay');
+  document.getElementById('searchService').textContent = state.selectedService.name;
+  try {
+    const docRef = await db.collection('orders').add({
+      citizenUid: user.uid,
+      citizenName: document.getElementById('sideName').textContent,
+      citizenPhone: state.pendingPhone || '',
+      service: state.selectedService.name,
+      mode: state.selectedMode === 'walkin' ? 'Walk-in' : 'Doorstep',
+      price, status: 'pending',
+      providerUid: null, providerName: null, providerArea: null,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    state.activeOrderId = docRef.id;
     setTimeout(() => {
-      hideOverlay('foundOverlay');
-      const price = state.selectedMode === 'walkin' ? state.selectedService.price : state.selectedService.doorstep;
-      document.getElementById('acceptedInfo').textContent = `${p.name} accepted your request`;
+      hideOverlay('searchingOverlay');
+      document.getElementById('acceptedInfo').textContent = 'Order placed successfully';
       document.getElementById('acceptedDetails').textContent = `${state.selectedService.name} · ${state.selectedMode === 'walkin' ? 'Walk-in' : 'Doorstep'} · ₹${price}`;
-      document.getElementById('acceptedETA').textContent = `Estimated time: ${state.selectedService.time} minutes`;
+      document.getElementById('acceptedETA').textContent = 'A nearby provider will accept your request shortly.';
       showOverlay('acceptedOverlay');
-    }, 2600);
-  }, 2200);
+    }, 1800);
+  } catch(e) {
+    hideOverlay('searchingOverlay');
+    showToast('Could not place order. Please try again.');
+  }
 }
 
 function closeAccepted() {
   hideOverlay('acceptedOverlay');
   document.getElementById('step-select').style.display = 'none';
   document.getElementById('step-order').style.display = 'block';
-  const p = state.currentOrderProvider;
   document.getElementById('activeOrderInfo').textContent = `${state.selectedService.name} · ${state.selectedMode === 'walkin' ? 'Walk-in' : 'Doorstep'}`;
-  document.getElementById('orderProviderInitial').textContent = p.initial;
-  document.getElementById('orderProviderName').textContent = p.name;
-  document.getElementById('orderProviderArea').textContent = `${p.area} · ${p.distance} away`;
-  document.getElementById('rateProviderName').textContent = p.name;
-  renderStepTracker('stepTracker', 1);
+  document.getElementById('orderProviderName').textContent = 'Waiting for a provider...';
+  document.getElementById('orderProviderArea').textContent = 'Your order is in the queue';
+  document.getElementById('orderProviderInitial').textContent = '?';
   document.getElementById('ratingCard').style.display = 'none';
-  state.orderStep = 1;
-  setTimeout(() => advanceOrderStep(), 3500);
+  renderStepTracker('stepTracker', 0);
+  // Listen for real-time order status updates
+  if (state.activeOrderId) {
+    db.collection('orders').doc(state.activeOrderId).onSnapshot(snap => {
+      const o = snap.data(); if (!o) return;
+      if (o.providerName) {
+        document.getElementById('orderProviderName').textContent = o.providerName;
+        document.getElementById('orderProviderArea').textContent = o.providerArea || '';
+        document.getElementById('orderProviderInitial').textContent = o.providerName[0];
+        document.getElementById('rateProviderName').textContent = o.providerName;
+      }
+      const statusMap = { pending:0, accepted:1, in_progress:2, completed:4 };
+      renderStepTracker('stepTracker', statusMap[o.status] || 0);
+      if (o.status === 'completed') {
+        document.getElementById('orderStatusBadge').textContent = 'Completed';
+        document.getElementById('orderStatusBadge').className = 'badge badge-green';
+        document.getElementById('ratingCard').style.display = 'block';
+      }
+    });
+  }
 }
 
-const ORDER_STEPS = [
-  { title: 'Request confirmed', desc: 'Provider matched and notified' },
-  { title: 'Provider en route / preparing', desc: 'Your service is being processed' },
-  { title: 'In progress', desc: 'Government formality being completed' },
-  { title: 'Completed', desc: 'Certificate/service delivered' },
-];
-
 function renderStepTracker(elId, activeIdx) {
-  document.getElementById(elId).innerHTML = ORDER_STEPS.map((s, i) => `
+  const el = document.getElementById(elId); if (!el) return;
+  el.innerHTML = ORDER_STEPS.map((s, i) => `
     <div class="step-item ${i < activeIdx ? 'done' : i === activeIdx ? 'active' : ''}">
       <div class="step-dot">${i < activeIdx ? '✓' : i + 1}</div>
       <div><div class="step-title">${s.title}</div><div class="step-desc">${s.desc}</div></div>
     </div>`).join('');
-}
-
-function advanceOrderStep() {
-  state.orderStep++;
-  if (state.orderStep >= ORDER_STEPS.length) {
-    renderStepTracker('stepTracker', ORDER_STEPS.length);
-    document.getElementById('orderStatusBadge').textContent = 'Completed';
-    document.getElementById('orderStatusBadge').className = 'badge badge-green';
-    document.getElementById('ratingCard').style.display = 'block';
-    return;
-  }
-  renderStepTracker('stepTracker', state.orderStep);
-  setTimeout(advanceOrderStep, 3200);
 }
 
 function sendChat() {
@@ -1347,294 +1439,311 @@ function submitRating() {
 }
 
 // ---- PROVIDER ----
-function renderProviderSelector() {
-  document.getElementById('providerSelector').innerHTML = PROVIDERS.map(p => `
-    <div class="service-card ${p.id === state.currentProvider.id ? 'selected' : ''}" onclick="switchProvider(${p.id})">
-      <div class="service-icon">🏪</div><div class="service-name" style="font-size:12px">${p.name}</div><div class="service-meta">${p.area}</div>
-    </div>`).join('');
-}
-function switchProvider(id) {
-  state.currentProvider = PROVIDERS.find(p => p.id === id);
-  renderProviderSelector();
-  updateProviderView();
-}
-function updateProviderView() {
-  const p = state.currentProvider;
-  document.getElementById('provInitial').textContent = p.initial;
-  document.getElementById('provName').textContent = p.name;
-  document.getElementById('provArea').textContent = '📍 ' + p.area;
-  document.getElementById('provRating').textContent = p.rating || '–';
-  document.getElementById('provServices').innerHTML = p.services.map(sid => {
+async function loadProviderData(uid) {
+  const snap = await db.collection('providers').doc(uid).get();
+  if (!snap.exists) { showToast('Provider profile not found.'); return; }
+  state.providerDoc = snap.data();
+  const p = state.providerDoc;
+  // Hide multi-provider selector (not needed in real app)
+  const selCard = document.getElementById('providerSelector')?.closest('.card');
+  if (selCard) selCard.style.display = 'none';
+  document.getElementById('provInitial').textContent = (p.businessName || p.name || '?')[0];
+  document.getElementById('provName').textContent = p.businessName || p.name;
+  document.getElementById('provArea').textContent = p.area;
+  document.getElementById('provRating').textContent = p.rating ? p.rating.toFixed(1) : '–';
+  document.getElementById('provServices').innerHTML = (p.services || []).map(sid => {
     const s = SERVICES.find(x => x.id === sid);
-    return s ? `<span class="badge badge-blue">${s.icon} ${s.name}</span>` : '';
+    return s ? `<span class="badge badge-blue">${s.name}</span>` : '';
   }).join('');
   let banner = document.getElementById('verifyBanner');
   if (!banner) {
-    banner = document.createElement('div');
-    banner.id = 'verifyBanner';
+    banner = document.createElement('div'); banner.id = 'verifyBanner';
     banner.className = 'verify-banner';
     document.getElementById('providerProfile').insertAdjacentElement('afterend', banner);
   }
   if (!p.verified) {
     banner.style.display = 'flex';
-    banner.innerHTML = `⏳ Your profile is pending admin verification (CSC ID: ${p.cscId || '—'}). You'll be able to go online once approved — switch to the Admin Panel to verify it in this demo.`;
-  } else {
-    banner.style.display = 'none';
-  }
+    banner.innerHTML = `Your profile is pending admin verification. You can go online once approved.`;
+  } else { banner.style.display = 'none'; listenForOrders(uid, p.services || []); }
+  document.getElementById('todayOrders').textContent = p.todayOrders || 0;
+  document.getElementById('todayEarnings').textContent = '₹' + (p.todayEarnings || 0);
+  loadProviderHistory(uid);
+}
+
+function listenForOrders(uid, services) {
+  if (state.ordersUnsubscribe) state.ordersUnsubscribe();
+  state.ordersUnsubscribe = db.collection('orders')
+    .where('status', '==', 'pending')
+    .orderBy('createdAt', 'desc')
+    .onSnapshot(snap => {
+      const orders = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+        .filter(o => services.includes(SERVICES.find(s => s.name === o.service)?.id));
+      if (orders.length && state.isOnline && !document.getElementById('incomingRequest').classList.contains('show')) {
+        showIncomingRequest(orders[0]);
+      }
+    });
+}
+
+function showIncomingRequest(order) {
+  state.pendingRequest = order;
+  const payout = Math.round(order.price * 0.85);
+  document.getElementById('reqServiceBadge').textContent = order.service;
+  document.getElementById('reqCitizenName').textContent = order.citizenName + ' · ' + order.mode;
+  document.getElementById('reqDistance').textContent = 'Payout: ₹' + payout + ' (after 15% platform fee)';
+  document.getElementById('incomingRequest').classList.add('show');
+  let sec = 30; const circle = document.getElementById('countdownCircle'); const num = document.getElementById('countdownNum');
+  circle.style.strokeDashoffset = 0; clearInterval(state.countdownTimer);
+  state.countdownTimer = setInterval(() => {
+    sec--; num.textContent = sec;
+    circle.style.strokeDashoffset = (30-sec)/30*213.6;
+    if (sec<=5) num.classList.add('urgent');
+    if (sec<=0) { clearInterval(state.countdownTimer); declineRequest(); }
+  }, 1000);
+}
+
+async function loadProviderHistory(uid) {
+  try {
+    const snap = await db.collection('orders').where('providerUid','==',uid).orderBy('createdAt','desc').limit(10).get();
+    const tbody = document.getElementById('provOrderHistory');
+    if (snap.empty) { tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--grey-600);padding:20px">No orders yet</td></tr>'; return; }
+    tbody.innerHTML = snap.docs.map(d => {
+      const o = d.data();
+      const time = o.createdAt?.toDate().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}) || '—';
+      return `<tr><td>${o.service}</td><td>${o.citizenName}</td><td>${time}</td><td>₹${Math.round(o.price*0.85)}</td><td><span class="badge badge-${o.status==='completed'?'green':'yellow'}">${o.status}</span></td></tr>`;
+    }).join('');
+  } catch(e) { /* index may be building */ }
 }
 
 function toggleOnline() {
-  const p = state.currentProvider;
-  if (!p.verified) { showToast('⚠️ Your profile is still pending admin verification.'); return; }
+  const p = state.providerDoc;
+  if (!p || !p.verified) { showToast('Your profile is pending admin verification.'); return; }
   state.isOnline = !state.isOnline;
+  db.collection('providers').doc(state.user.uid).update({ isOnline: state.isOnline });
   const toggle = document.getElementById('onlineToggle');
   toggle.classList.toggle('online-state', state.isOnline);
   document.getElementById('onlineText').textContent = state.isOnline ? 'Online' : 'Go Online';
   document.getElementById('provStatusBadge').textContent = state.isOnline ? 'Online' : 'Offline';
   document.getElementById('provStatusBadge').className = state.isOnline ? 'badge badge-green' : 'badge badge-grey';
-  if (state.isOnline) setTimeout(triggerIncomingRequest, 2500);
-}
-
-function triggerIncomingRequest() {
-  if (!state.isOnline) return;
-  const svc = SERVICES[Math.floor(Math.random() * SERVICES.length)];
-  const citizen = CITIZENS[Math.floor(Math.random() * CITIZENS.length)];
-  const mode = Math.random() > 0.5 ? 'Walk-in' : 'Doorstep';
-  const price = mode === 'Walk-in' ? svc.price : svc.doorstep;
-  state.pendingRequest = { svc, citizen, mode, payout: Math.round(price * 0.85) };
-  document.getElementById('reqServiceBadge').textContent = svc.name;
-  document.getElementById('reqCitizenName').textContent = `${citizen} · ${mode}`;
-  document.getElementById('reqDistance').textContent = `📍 ${(Math.random()*3+0.4).toFixed(1)} km away · ₹${state.pendingRequest.payout} payout (after commission)`;
-  document.getElementById('incomingRequest').classList.add('show');
-  let sec = 15;
-  const circle = document.getElementById('countdownCircle');
-  const num = document.getElementById('countdownNum');
-  circle.style.strokeDashoffset = 0;
-  clearInterval(state.countdownTimer);
-  state.countdownTimer = setInterval(() => {
-    sec--;
-    num.textContent = sec;
-    circle.style.strokeDashoffset = (15 - sec) / 15 * 213.6;
-    if (sec <= 5) num.classList.add('urgent');
-    if (sec <= 0) { clearInterval(state.countdownTimer); declineRequest(); }
-  }, 1000);
 }
 
 function declineRequest() {
   clearInterval(state.countdownTimer);
   document.getElementById('incomingRequest').classList.remove('show');
   document.getElementById('countdownNum').classList.remove('urgent');
-  if (state.isOnline) setTimeout(triggerIncomingRequest, 4000);
 }
 
-function acceptRequest() {
+async function acceptRequest() {
   clearInterval(state.countdownTimer);
   document.getElementById('incomingRequest').classList.remove('show');
   document.getElementById('countdownNum').classList.remove('urgent');
-  const r = state.pendingRequest;
-  document.getElementById('provOrderService').textContent = r.svc.name;
-  document.getElementById('provOrderCitizen').textContent = r.citizen;
-  document.getElementById('provOrderMode').textContent = `${r.mode} · Payout: ₹${r.payout}`;
-  document.getElementById('provActiveOrder').style.display = 'block';
-  renderStepTracker('provStepTracker', 1);
-  document.getElementById('markDoneBtn').disabled = true;
-  setTimeout(() => { renderStepTracker('provStepTracker', 2); document.getElementById('markDoneBtn').disabled = false; }, 3000);
-  showToast(`✅ Order accepted — ${r.citizen}`);
+  const order = state.pendingRequest; const p = state.providerDoc;
+  try {
+    await db.collection('orders').doc(order.id).update({
+      status: 'accepted', providerUid: state.user.uid,
+      providerName: p.businessName || p.name, providerArea: p.area,
+      acceptedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    const payout = Math.round(order.price * 0.85);
+    document.getElementById('provOrderService').textContent = order.service;
+    document.getElementById('provOrderCitizen').textContent = order.citizenName;
+    document.getElementById('provOrderMode').textContent = order.mode + ' · Payout: ₹' + payout;
+    document.getElementById('provActiveOrder').style.display = 'block';
+    renderStepTracker('provStepTracker', 1);
+    document.getElementById('markDoneBtn').disabled = true;
+    setTimeout(() => { renderStepTracker('provStepTracker', 2); document.getElementById('markDoneBtn').disabled = false; }, 3000);
+    showToast('Order accepted — ' + order.citizenName);
+  } catch(e) { showToast('Error accepting order. Please try again.'); }
 }
 
-function markOrderDone() {
-  const r = state.pendingRequest;
-  renderStepTracker('provStepTracker', 4);
-  document.getElementById('provActiveOrder').style.display = 'none';
-  document.getElementById('todayOrders').textContent = parseInt(document.getElementById('todayOrders').textContent) + 1;
-  document.getElementById('todayEarnings').textContent = '₹' + (parseInt(document.getElementById('todayEarnings').textContent.replace('₹','')) + r.payout);
-  document.getElementById('provOrderHistory').insertAdjacentHTML('afterbegin', `<tr><td>${r.svc.name}</td><td>${r.citizen}</td><td>Just now</td><td>₹${r.payout}</td><td><span class="badge badge-green">Done</span></td></tr>`);
-  showToast('🎉 Order marked complete!');
-  if (state.isOnline) setTimeout(triggerIncomingRequest, 4000);
+async function markOrderDone() {
+  const order = state.pendingRequest;
+  try {
+    const payout = Math.round(order.price * 0.85);
+    await db.collection('orders').doc(order.id).update({ status: 'completed', completedAt: firebase.firestore.FieldValue.serverTimestamp() });
+    await db.collection('providers').doc(state.user.uid).update({
+      totalOrders: firebase.firestore.FieldValue.increment(1),
+      todayOrders: firebase.firestore.FieldValue.increment(1),
+      todayEarnings: firebase.firestore.FieldValue.increment(payout)
+    });
+    renderStepTracker('provStepTracker', 4);
+    document.getElementById('provActiveOrder').style.display = 'none';
+    document.getElementById('todayOrders').textContent = parseInt(document.getElementById('todayOrders').textContent) + 1;
+    document.getElementById('todayEarnings').textContent = '₹' + (parseInt(document.getElementById('todayEarnings').textContent.replace('₹','')) + payout);
+    loadProviderHistory(state.user.uid);
+    showToast('Order marked complete!');
+  } catch(e) { showToast('Error. Please try again.'); }
 }
 
 // ---- ADMIN ----
-const ALL_ORDERS_DATA = [
-  { id: 'BK-1047', service: 'Bill Payment', citizen: 'Rakesh Pawar', provider: 'Shweta DM Center', mode: 'Doorstep', amount: 50, status: 'In progress' },
-  { id: 'BK-1046', service: 'PAN Card', citizen: 'Sid Kale', provider: 'Priti SC Center', mode: 'Walk-in', amount: 100, status: 'Completed' },
-  { id: 'BK-1045', service: 'Caste Certificate', citizen: 'Sarfaraz Jaiswar', provider: 'Dinesh GK', mode: 'Doorstep', amount: 110, status: 'Requested' },
-  { id: 'BK-1044', service: 'Ration Card', citizen: 'Meghna Subramanyam', provider: 'Shweta DM Center', mode: 'Walk-in', amount: 60, status: 'Completed' },
-  { id: 'BK-1043', service: 'Aadhaar Update', citizen: 'Anu Pardeshi', provider: 'Priti SC Center', mode: 'Doorstep', amount: 80, status: 'In progress' },
-  { id: 'BK-1042', service: 'Income Certificate', citizen: 'Rishi Sayyed', provider: 'Dinesh GK', mode: 'Walk-in', amount: 80, status: 'Completed' },
-  { id: 'BK-1041', service: 'Scholarship App.', citizen: 'Vikram Bendre', provider: 'Dinesh GK', mode: 'Walk-in', amount: 90, status: 'Completed' },
-  { id: 'BK-1040', service: 'PM Kisan', citizen: 'Lalita Pardeshi', provider: 'Priti SC Center', mode: 'Doorstep', amount: 90, status: 'Completed' },
-  { id: 'BK-1039', service: 'Ayushman Bharat', citizen: 'Sanjay Kumbhar', provider: 'Shweta DM Center', mode: 'Walk-in', amount: 75, status: 'Completed' },
-  { id: 'BK-1038', service: 'Passport Assistance', citizen: 'Divya Naik', provider: 'Dinesh GK', mode: 'Doorstep', amount: 230, status: 'Completed' },
-];
+async function loadAdminData() {
+  try {
+    const [ordSnap, provSnap, citSnap] = await Promise.all([
+      db.collection('orders').get(),
+      db.collection('providers').get(),
+      db.collection('users').where('role','==','citizen').get()
+    ]);
+    const orders = ordSnap.docs.map(d=>({id:d.id,...d.data()}));
+    const providers = provSnap.docs.map(d=>({id:d.id,...d.data()}));
+    const completed = orders.filter(o=>o.status==='completed');
+    const revenue = completed.reduce((s,o)=>s+(o.price||0),0);
+    const stats = {
+      adminTotalOrders: orders.length, adminCompletedOrders: completed.length,
+      adminRevenue: '₹'+revenue.toLocaleString('en-IN'),
+      adminCitizens: citSnap.size,
+      adminActiveProviders: providers.filter(p=>p.verified).length,
+      adminPendingNote: providers.filter(p=>!p.verified).length + ' pending verification'
+    };
+    Object.entries(stats).forEach(([id,v])=>{ const el=document.getElementById(id); if(el) el.textContent=v; });
+    renderProvidersTable(providers);
+    renderOrdersTable(orders);
+    renderServiceBreakdown(orders);
+    renderAdminPricing();
+  } catch(e) { console.error('Admin load error:', e); showToast('Error loading admin data.'); }
+}
 
-function renderAllProviders() {
-  const pending = PROVIDERS.filter(p => !p.verified);
-  const verified = PROVIDERS.filter(p => p.verified);
-  document.getElementById('pendingCount').textContent = `${pending.length} pending`;
-  document.getElementById('pendingProvidersList').innerHTML = pending.length
-    ? pending.map(p => `
+function renderProvidersTable(providers) {
+  const pending = providers.filter(p=>!p.verified);
+  const verified = providers.filter(p=>p.verified);
+  const pc = document.getElementById('pendingCount');
+  if (pc) pc.textContent = pending.length + ' pending';
+  const pl = document.getElementById('pendingProvidersList');
+  if (pl) pl.innerHTML = pending.length
+    ? pending.map(p=>`
       <div style="display:flex;align-items:center;justify-content:space-between;padding:14px;border:1.5px solid var(--yellow);background:var(--yellow-pale);border-radius:10px;margin-bottom:8px;">
-        <div>
-          <div style="font-size:13px;font-weight:700">${p.name}</div>
-          <div style="font-size:11px;color:var(--grey-600);margin-top:2px">${p.area} · CSC ID: ${p.cscId || '—'} · ${p.services.length} service(s) offered</div>
-        </div>
+        <div><div style="font-size:13px;font-weight:700">${p.businessName||p.name}</div>
+          <div style="font-size:11px;color:var(--grey-600);margin-top:2px">${p.area} · CSC: ${p.cscId||'—'} · ${p.services?.length||0} services</div></div>
         <div style="display:flex;gap:8px">
-          <button class="btn btn-danger btn-sm" onclick="rejectProviderAdmin(${p.id})">✕ Reject</button>
-          <button class="btn btn-success btn-sm" onclick="verifyProviderDemo(${p.id})">✓ Approve</button>
-        </div>
-      </div>`).join('')
-    : '<div style="text-align:center;padding:24px;color:var(--grey-600);font-size:13px">✓ No pending verifications</div>';
-
-  document.getElementById('allProvidersList').innerHTML = verified.length
-    ? verified.map(p => `
+          <button class="btn btn-danger btn-sm" onclick="rejectProvider('${p.id}')">Reject</button>
+          <button class="btn btn-success btn-sm" onclick="approveProvider('${p.id}')">Approve</button>
+        </div></div>`).join('')
+    : '<div style="text-align:center;padding:24px;color:var(--grey-600);font-size:13px">No pending verifications</div>';
+  const al = document.getElementById('allProvidersList');
+  if (al) al.innerHTML = verified.length
+    ? verified.map(p=>`
       <div style="display:flex;align-items:center;justify-content:space-between;padding:14px;background:var(--bg);border-radius:10px;margin-bottom:8px;">
         <div style="display:flex;align-items:center;gap:12px">
-          <div style="width:38px;height:38px;border-radius:11px;background:linear-gradient(135deg,var(--blue),var(--pink));display:flex;align-items:center;justify-content:center;color:white;font-weight:800;font-size:14px">${p.initial}</div>
-          <div>
-            <div style="font-size:13px;font-weight:700">${p.name}</div>
-            <div style="font-size:11px;color:var(--grey-600);margin-top:2px">📍 ${p.area} · ${p.distance} · ${p.rating ? '⭐ ' + p.rating + ' · ' + p.reviews + ' reviews' : 'New provider'} · ${p.services.length} services</div>
-          </div>
-        </div>
-        <span class="badge badge-green">✓ Verified</span>
-      </div>`).join('')
+          <div style="width:38px;height:38px;border-radius:11px;background:linear-gradient(135deg,var(--blue),var(--brand));display:flex;align-items:center;justify-content:center;color:white;font-weight:800;font-size:14px">${(p.businessName||p.name||'?')[0]}</div>
+          <div><div style="font-size:13px;font-weight:700">${p.businessName||p.name}</div>
+            <div style="font-size:11px;color:var(--grey-600);margin-top:2px">${p.area} · ${p.services?.length||0} services · ${p.totalOrders||0} orders</div></div>
+        </div><span class="badge badge-green">Verified</span></div>`).join('')
     : '<div style="text-align:center;padding:24px;color:var(--grey-600);font-size:13px">No verified providers yet</div>';
-
-  const active = PROVIDERS.filter(p => p.verified).length;
-  if (document.getElementById('adminActiveProviders')) document.getElementById('adminActiveProviders').textContent = active;
-  if (document.getElementById('adminPendingNote')) document.getElementById('adminPendingNote').textContent = pending.length + ' pending verification';
 }
 
-function rejectProviderAdmin(id) {
-  const idx = PROVIDERS.findIndex(p => p.id === id);
-  if (idx !== -1) { PROVIDERS.splice(idx, 1); renderAllProviders(); showToast('Provider application rejected.'); }
+async function approveProvider(id) {
+  await db.collection('providers').doc(id).update({ verified: true });
+  showToast('Provider approved and activated.');
+  loadAdminData();
+}
+async function rejectProvider(id) {
+  await db.collection('providers').doc(id).delete();
+  showToast('Provider application rejected.');
+  loadAdminData();
 }
 
-function verifyProviderDemo(id) {
-  const p = PROVIDERS.find(x => x.id === id);
-  if (!p) return;
-  p.verified = true;
-  if (!p.rating) p.rating = 5.0;
-  renderAllProviders();
-  showToast(`✅ ${p.name} approved and verified`);
-  if (state.currentProvider && state.currentProvider.id === id) updateProviderView();
+function renderOrdersTable(orders) {
+  const el = document.getElementById('allOrdersTable'); if (!el) return;
+  const sc = { completed:'badge-green', accepted:'badge-yellow', pending:'badge-blue', in_progress:'badge-yellow' };
+  el.innerHTML = orders.length
+    ? orders.map(o=>`<tr>
+        <td><span class="badge badge-grey">${o.id.slice(-6).toUpperCase()}</span></td>
+        <td>${o.service}</td><td>${o.citizenName||'—'}</td><td>${o.providerName||'—'}</td>
+        <td><span class="badge badge-grey">${o.mode||'—'}</span></td>
+        <td style="font-weight:700">₹${o.price||0}</td>
+        <td><span class="badge ${sc[o.status]||'badge-grey'}">${o.status}</span></td>
+      </tr>`).join('')
+    : '<tr><td colspan="7" style="text-align:center;color:var(--grey-600);padding:20px">No orders yet</td></tr>';
 }
 
-function renderServiceBreakdown() {
-  const bars = [
-    { name: 'PAN Card', count: 52, color: 'var(--pink)' },
-    { name: 'Aadhaar Update', count: 48, color: 'var(--blue)' },
-    { name: 'Income Cert.', count: 41, color: 'var(--green)' },
-    { name: 'Bill Payment', count: 38, color: 'var(--yellow-dark)' },
-    { name: 'PM Kisan', count: 34, color: '#7C3AED' },
-    { name: 'Ayushman Bharat', count: 28, color: '#0891B2' },
-    { name: 'Scholarship', count: 19, color: 'var(--pink-light)' },
-    { name: 'Passport Help', count: 12, color: 'var(--blue-deep)' },
-  ];
-  const max = Math.max(...bars.map(d => d.count));
-  document.getElementById('serviceBreakdown').innerHTML = bars.map(d => `
+function filterOrders() {
+  const st = document.getElementById('orderStatusFilter')?.value||'';
+  const md = document.getElementById('orderModeFilter')?.value||'';
+  db.collection('orders').orderBy('createdAt','desc').get().then(snap=>{
+    let orders = snap.docs.map(d=>({id:d.id,...d.data()}));
+    if (st) orders = orders.filter(o=>o.status===st);
+    if (md) orders = orders.filter(o=>o.mode===md);
+    renderOrdersTable(orders);
+  });
+}
+
+function renderServiceBreakdown(orders) {
+  const counts = {}; SERVICES.forEach(s=>counts[s.name]=0);
+  (orders||[]).forEach(o=>{ if(counts[o.service]!==undefined) counts[o.service]++; });
+  const max = Math.max(...Object.values(counts), 1);
+  const colors = ['var(--brand)','var(--blue)','var(--green)','var(--yellow-dark)','#7C3AED','#0891B2','var(--brand-light)','var(--blue-deep)'];
+  const el = document.getElementById('serviceBreakdown'); if (!el) return;
+  el.innerHTML = SERVICES.map((s,i)=>`
     <div class="bar-row">
-      <div class="bar-label">${d.name}</div>
-      <div class="bar-track">
-        <div class="bar-fill" style="width:${Math.round(d.count/max*100)}%;background:${d.color}">
-          <span>${d.count} orders</span>
-        </div>
-      </div>
+      <div class="bar-label">${s.name}</div>
+      <div class="bar-track"><div class="bar-fill" style="width:${Math.max(Math.round(counts[s.name]/max*100),2)}%;background:${colors[i%colors.length]}">
+        <span>${counts[s.name]} orders</span></div></div>
     </div>`).join('');
 }
 
-function renderAllOrders() { filterOrders(); }
-function filterOrders() {
-  const st = document.getElementById('orderStatusFilter') ? document.getElementById('orderStatusFilter').value : '';
-  const md = document.getElementById('orderModeFilter') ? document.getElementById('orderModeFilter').value : '';
-  const rows = ALL_ORDERS_DATA.filter(o => (!st || o.status === st) && (!md || o.mode === md));
-  const sc = { Completed:'badge-green', 'In progress':'badge-yellow', Requested:'badge-blue' };
-  const mc = { 'Walk-in':'badge-grey', Doorstep:'badge-blue' };
-  document.getElementById('allOrdersTable').innerHTML = rows.map(o => `
-    <tr>
-      <td><span class="badge badge-grey">${o.id}</span></td>
-      <td>${o.service}</td><td>${o.citizen}</td><td>${o.provider}</td>
-      <td><span class="badge ${mc[o.mode]||'badge-grey'}">${o.mode}</span></td>
-      <td style="font-weight:700">₹${o.amount}</td>
-      <td><span class="badge ${sc[o.status]||'badge-grey'}">${o.status}</span></td>
-    </tr>`).join('');
-}
-
 function renderAdminPricing() {
-  const el = document.getElementById('adminPricingTable');
-  if (!el) return;
+  const el = document.getElementById('adminPricingTable'); if (!el) return;
   el.innerHTML = `<div class="table-wrap"><table>
     <thead><tr><th>Service</th><th>Walk-in (₹)</th><th>Doorstep (₹)</th><th>Est. Time</th></tr></thead>
-    <tbody>${SERVICES.map(s => `<tr>
-      <td>${s.icon} ${s.name}</td>
+    <tbody>${SERVICES.map(s=>`<tr><td>${s.name}</td>
       <td><input type="number" value="${s.price}" style="width:72px;padding:5px 8px;border:1px solid var(--grey-100);border-radius:6px;font-size:13px"></td>
       <td><input type="number" value="${s.doorstep}" style="width:72px;padding:5px 8px;border:1px solid var(--grey-100);border-radius:6px;font-size:13px"></td>
-      <td style="color:var(--grey-600)">${s.time} min</td>
-    </tr>`).join('')}</tbody>
+      <td style="color:var(--grey-600)">${s.time} min</td></tr>`).join('')}</tbody>
   </table></div>`;
 }
 
-// Admin tab switching
 document.querySelectorAll('.admin-tab').forEach(tab => {
   tab.addEventListener('click', () => {
     document.querySelectorAll('.admin-tab').forEach(t => t.classList.remove('active'));
     document.querySelectorAll('.atab-pane').forEach(p => p.classList.remove('active'));
     tab.classList.add('active');
     document.getElementById('atab-' + tab.dataset.atab).classList.add('active');
+    if (tab.dataset.atab === 'orders') filterOrders();
   });
-})
+});
 
 // ---- VAULT ----
 const DIGILOCKER_DOCS = [
-  { name: 'Aadhaar Card', icon: '🪪', status: 'digilocker', source: 'UIDAI', pin: null },
-  { name: 'PAN Card', icon: '💳', status: 'digilocker', source: 'Income Tax Dept.', pin: null },
-  { name: 'Driving Licence', icon: '🚗', status: 'digilocker', source: 'Ministry of Road Transport', pin: null },
-  { name: 'Voter ID (EPIC)', icon: '🗳️', status: 'digilocker', source: 'Election Commission', pin: null },
+  { name: 'Aadhaar Card', abbr: 'ID', source: 'UIDAI', pin: null },
+  { name: 'PAN Card', abbr: 'PAN', source: 'Income Tax Dept.', pin: null },
+  { name: 'Driving Licence', abbr: 'DL', source: 'Ministry of Road Transport', pin: null },
+  { name: 'Voter ID', abbr: 'EPIC', source: 'Election Commission', pin: null },
 ];
 let digiConnected = false;
 let currentPinDoc = null;
 
 function renderVault() {
-  const allDocs = digiConnected
-    ? [...DIGILOCKER_DOCS, ...DOCS.filter(d => d.status !== 'uploaded' || !DIGILOCKER_DOCS.find(x => x.name === d.name))]
-    : DOCS;
-  document.getElementById('vaultGrid').innerHTML = allDocs.map(d => {
-    const isDigiLocker = d.status === 'digilocker';
+  const el = document.getElementById('vaultGrid'); if (!el) return;
+  if (!digiConnected) {
+    el.innerHTML = '<div style="text-align:center;padding:32px;color:var(--grey-600);grid-column:1/-1"><div style="font-size:36px;margin-bottom:12px">📁</div><div style="font-size:14px;font-weight:600">No documents yet</div><div style="font-size:12px;margin-top:6px">Connect DigiLocker to import your government documents</div></div>';
+    return;
+  }
+  el.innerHTML = DIGILOCKER_DOCS.map(d => {
     const isPinned = d.pin;
-    let statusLabel = isDigiLocker ? '🏛️ DigiLocker' : d.status === 'uploaded' ? (isPinned ? '🔒 PIN Protected' : '✓ Stored') : d.status === 'pending' ? '⏳ Pending' : '+ Upload';
-    let cls = isDigiLocker ? 'uploaded' : d.status === 'uploaded' ? 'uploaded' : '';
-    return `<div class="vault-item ${cls}" onclick="vaultAction('${d.name}','${d.status}')">
-      <div class="vault-doc-icon">${d.icon}</div>
+    return `<div class="vault-item uploaded" onclick="vaultAction('${d.name}')">
+      <div class="vault-doc-icon" style="font-size:11px;font-weight:800;background:var(--brand-pale);color:var(--brand);border-radius:8px;padding:8px 10px;margin-bottom:8px">${d.abbr}</div>
       <div class="vault-doc-name">${d.name}</div>
-      <div class="vault-doc-status" style="font-size:10px">${statusLabel}</div>
+      <div class="vault-doc-status" style="font-size:10px">${isPinned ? 'PIN Protected' : 'DigiLocker'}</div>
     </div>`;
   }).join('');
 }
-function vaultAction(name, status) {
-  const doc = [...DOCS, ...DIGILOCKER_DOCS].find(d => d.name === name);
-  if (!doc) return;
-  if (status === 'uploaded' || status === 'digilocker') {
-    if (doc.pin) {
-      currentPinDoc = doc;
-      document.getElementById('docPinIcon').textContent = doc.icon;
-      document.getElementById('docPinTitle').textContent = 'Enter PIN — ' + doc.name;
-      document.getElementById('docPinSetSection').style.display = 'none';
-      document.getElementById('docPinVerifySection').style.display = 'block';
-      [0,1,2,3].forEach(i => document.getElementById('vpin' + i).value = '');
-      document.getElementById('vpin0').focus();
-      showOverlay('docPinOverlay');
-    } else {
-      currentPinDoc = doc;
-      document.getElementById('docPinIcon').textContent = doc.icon;
-      document.getElementById('docPinTitle').textContent = 'Protect — ' + doc.name;
-      document.getElementById('docPinSetSection').style.display = 'block';
-      document.getElementById('docPinVerifySection').style.display = 'none';
-      [0,1,2,3].forEach(i => document.getElementById('pin' + i).value = '');
-      document.getElementById('pin0').focus();
-      showOverlay('docPinOverlay');
-    }
+function vaultAction(name) {
+  const doc = DIGILOCKER_DOCS.find(d => d.name === name); if (!doc) return;
+  currentPinDoc = doc;
+  if (doc.pin) {
+    document.getElementById('docPinIcon').textContent = doc.abbr;
+    document.getElementById('docPinTitle').textContent = 'Enter PIN — ' + doc.name;
+    document.getElementById('docPinSetSection').style.display = 'none';
+    document.getElementById('docPinVerifySection').style.display = 'block';
+    [0,1,2,3].forEach(i => document.getElementById('vpin'+i).value='');
+    document.getElementById('vpin0').focus();
   } else {
-    showToast('📤 Tap "Connect DigiLocker" to import your documents automatically');
+    document.getElementById('docPinIcon').textContent = doc.abbr;
+    document.getElementById('docPinTitle').textContent = 'Protect — ' + doc.name;
+    document.getElementById('docPinSetSection').style.display = 'block';
+    document.getElementById('docPinVerifySection').style.display = 'none';
+    [0,1,2,3].forEach(i => document.getElementById('pin'+i).value='');
+    document.getElementById('pin0').focus();
   }
+  showOverlay('docPinOverlay');
 }
 function pinMove(i) { const b = document.getElementById('pin'+i); if (b.value && i < 3) document.getElementById('pin'+(i+1)).focus(); }
 function vpinMove(i) { const b = document.getElementById('vpin'+i); if (b.value && i < 3) document.getElementById('vpin'+(i+1)).focus(); }
@@ -1667,8 +1776,9 @@ function digiAllow() {
     hideOverlay('digiOverlay');
     document.getElementById('digiNotConnected').style.display = 'none';
     document.getElementById('digiConnected').style.cssText = 'display:block!important;background:var(--green-pale);border:1.5px solid var(--green);border-radius:12px;padding:12px 16px;margin-bottom:16px';
+    digiConnected = true;
     renderVault();
-    showToast('✅ DigiLocker connected — 4 documents imported');
+    showToast('DigiLocker connected — 4 documents imported');
   }, 2400);
 }
 function showVault() { showOverlay('vaultOverlay'); }
