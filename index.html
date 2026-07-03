@@ -394,8 +394,8 @@ body:not(.gated) .sidebar, body:not(.gated) .main-area { visibility:visible; }
   <div class="auth-form-panel">
   <div class="auth-card">
     <div class="auth-panel-logo">Tiny<span>Seva</span></div>
-    <div class="auth-panel-title">Sign in</div>
-    <div class="auth-panel-sub">Enter your mobile number to get started</div>
+    <div class="auth-panel-title">Sign In</div>
+    <div class="auth-panel-sub">Select your role and verify your identity to continue.</div>
     <div class="auth-progress" id="authProgress">
       <div class="dot done" data-step="1"></div>
       <div class="dot" data-step="2"></div>
@@ -409,13 +409,14 @@ body:not(.gated) .sidebar, body:not(.gated) .main-area { visibility:visible; }
         <div class="role-tab" data-role="provider">Provider (CSC)</div>
         <div class="role-tab" data-role="admin">Admin</div>
       </div>
-      <div class="form-group"><label class="form-label">Full Name</label><input type="text" class="form-input" id="loginName" placeholder="e.g. Rishi Sayyed"></div>
+      <div class="form-group"><label class="form-label">Full Name</label><input type="text" class="form-input" id="loginName" placeholder="Your full name"></div>
+      <label class="form-label" style="margin-bottom:8px">Contact</label>
       <div class="contact-toggle" id="contactToggle">
-        <div class="contact-toggle-btn active" data-mode="phone">📱 Phone Number</div>
-        <div class="contact-toggle-btn" data-mode="email">✉️ Email ID</div>
+        <div class="contact-toggle-btn active" data-mode="phone">Phone</div>
+        <div class="contact-toggle-btn" data-mode="email">Email</div>
       </div>
       <div class="form-group" id="contactPhoneGroup">
-        <div class="phone-row"><span class="phone-prefix">🇮🇳 +91</span><input type="text" class="form-input phone-field" id="loginPhone" placeholder="Mobile number" maxlength="10"></div>
+        <div class="phone-row"><span class="phone-prefix">+91</span><input type="text" class="form-input phone-field" id="loginPhone" placeholder="Mobile number" maxlength="10"></div>
       </div>
       <div class="form-group" id="contactEmailGroup" style="display:none"><input type="email" class="form-input" id="loginEmail" placeholder="you@example.com"></div>
       <div id="passwordSection" style="display:none">
@@ -424,7 +425,7 @@ body:not(.gated) .sidebar, body:not(.gated) .main-area { visibility:visible; }
           <div class="form-group"><label class="form-label">Confirm Password</label><input type="password" class="form-input" id="loginPasswordConfirm" placeholder="Re-enter password"></div>
         </div>
       </div>
-      <button class="btn btn-primary btn-lg" onclick="sendOtp()">Create Account &amp; Send OTP</button>
+      <button class="btn btn-primary btn-lg" onclick="sendOtp()">Continue</button>
       <div class="auth-hint" id="authHint">Enter your phone or email — we'll send a one-time code to verify it's you. No password needed.</div>
     </div>
 
@@ -474,9 +475,9 @@ body:not(.gated) .sidebar, body:not(.gated) .main-area { visibility:visible; }
     <div class="brand-tagline">Doorstep Govt. Services</div>
   </div>
   <div class="nav-section">
-    <div class="nav-item active" data-view="citizen"><span class="nav-icon">📱</span> Citizen App</div>
-    <div class="nav-item" data-view="provider"><span class="nav-icon">🧑‍💼</span> Provider App</div>
-    <div class="nav-item" data-view="admin"><span class="nav-icon">🖥</span> Admin Panel</div>
+    <div class="nav-item active" data-view="citizen">Citizen App</div>
+    <div class="nav-item" data-view="provider">Provider App</div>
+    <div class="nav-item" data-view="admin">Admin Panel</div>
   </div>
   <div class="sidebar-footer">
     <div class="user-info">
@@ -1034,19 +1035,15 @@ const DOCS = [
 
 let state = { selectedService: null, selectedMode: 'walkin', currentProvider: PROVIDERS[0], isOnline: false, countdownTimer: null, orderStep: 0, authRole: 'citizen', contactMode: 'phone', pendingOtp: null, newProviderProfile: null };
 
-// ---------- ROLE LANDING + URL routing ----------
+// ---------- URL routing (auth is always the first page) ----------
 (function() {
   const urlRole = new URLSearchParams(window.location.search).get('role');
-  if (!urlRole) {
-    // No role in URL → show landing, hide auth
-    document.getElementById('roleLanding').classList.add('show');
-    document.getElementById('authWrap').classList.add('hidden');
-  } else if (['citizen', 'provider', 'admin'].includes(urlRole)) {
-    // Role in URL → pre-select and hide the role tabs, show a role indicator instead
+  if (urlRole && ['citizen', 'provider', 'admin'].includes(urlRole)) {
+    // Role pre-selected via URL → lock the role tabs and show an indicator
     state.authRole = urlRole;
     document.querySelectorAll('#roleTabs .role-tab').forEach(t => t.classList.toggle('active', t.dataset.role === urlRole));
     document.getElementById('roleTabs').style.display = 'none';
-    const roleNames = { citizen: '👤 Citizen Login', provider: '🧑‍💼 Provider (CSC) Login', admin: '🖥️ Admin Login' };
+    const roleNames = { citizen: 'Citizen', provider: 'Provider (CSC)', admin: 'Admin' };
     const ind = document.createElement('div');
     ind.className = 'role-indicator';
     ind.innerHTML = `<span class="role-indicator-name">${roleNames[urlRole]}</span><span class="role-indicator-change" onclick="window.location.href=window.location.pathname">Change role</span>`;
@@ -1061,10 +1058,10 @@ function updatePasswordVisibility(role) {
   const hint = document.getElementById('authHint');
   if (role === 'citizen') {
     ps.style.display = 'none';
-    hint.textContent = 'Enter your phone or email — we\'ll send a one-time code to verify it\'s you. No password needed.';
+    hint.textContent = 'A one-time password will be sent to verify your identity.';
   } else {
     ps.style.display = 'block';
-    hint.textContent = 'Create a password to secure your ' + (role === 'admin' ? 'admin' : 'provider') + ' account. We\'ll also verify with OTP.';
+    hint.textContent = 'Set a password for your ' + (role === 'admin' ? 'admin' : 'provider') + ' account. OTP verification is also required.';
   }
 }
 // Apply to initial state (citizen default, or URL-specified role)
