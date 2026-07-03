@@ -430,7 +430,7 @@ body:not(.gated) .sidebar, body:not(.gated) .main-area { visibility:visible; }
         </div>
       </div>
       <button class="btn btn-primary btn-lg" onclick="sendOtp()">Continue</button>
-      <div class="auth-hint" id="authHint">Enter your phone or email — we'll send a one-time code to verify it's you. No password needed.</div>
+      <div class="auth-hint" id="authHint">A 6-digit verification code will be sent to your mobile number.</div>
     </div>
 
     <!-- STEP 2: OTP verification -->
@@ -1055,8 +1055,6 @@ const ORDER_STEPS = [
   { title: 'Completed', desc: 'Service delivered' },
 ];
 
-let state = { selectedService: null, selectedMode: 'walkin', currentProvider: PROVIDERS[0], isOnline: false, countdownTimer: null, orderStep: 0, authRole: 'citizen', contactMode: 'phone', pendingOtp: null, newProviderProfile: null };
-
 // ---- FIREBASE AUTH STATE ----
 auth.onAuthStateChanged(async (user) => {
   if (!user) return; // stay on auth screen
@@ -1134,7 +1132,7 @@ document.querySelectorAll('#contactToggle .contact-toggle-btn').forEach(btn => {
 
 function goToStep(n) {
   document.querySelectorAll('.auth-step').forEach(s => s.classList.remove('active'));
-  const ids = { 1: 'authStep1', 2: 'authStep2', 3: state.authRole === 'provider' ? 'authStep3Provider' : null };
+  const ids = { 1: 'authStep1', 2: 'authStep2', 3: state.pendingRole === 'provider' ? 'authStep3Provider' : null };
   if (ids[n]) document.getElementById(ids[n]).classList.add('active');
   document.querySelectorAll('#authProgress .dot').forEach(d => d.classList.toggle('done', Number(d.dataset.step) <= n));
 }
